@@ -1,0 +1,409 @@
+From c32bfe8017ab8d331b439fa7925449ad9656646c Mon Sep 17 00:00:00 2001
+From: vivek kumar <vivekkumar13@iisc.ac.in>
+Date: Sun, 20 Nov 2022 22:08:50 +0530
+Subject: [PATCH] assignment 2
+
+---
+ fs/open.c                      |  12 ++
+ fs/read_write.c                |   6 +
+ security/Makefile              |   3 +-
+ security/sandbox/Makefile      |   1 +
+ security/sandbox/headers.h     |   1 +
+ security/sandbox/sandbox_lsm.c | 250 +++++++++++++++++++++++++++++++++
+ 6 files changed, 272 insertions(+), 1 deletion(-)
+ create mode 100644 security/sandbox/Makefile
+ create mode 100644 security/sandbox/headers.h
+ create mode 100644 security/sandbox/sandbox_lsm.c
+
+diff --git a/fs/open.c b/fs/open.c
+index 1e06e443a..509304641 100644
+--- a/fs/open.c
++++ b/fs/open.c
+@@ -34,6 +34,7 @@
+ #include <linux/compat.h>
+ 
+ #include "internal.h"
++#include "../security/sandbox/headers.h"
+ 
+ int do_truncate(struct dentry *dentry, loff_t length, unsigned int time_attrs,
+ 	struct file *filp)
+@@ -1191,6 +1192,8 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
+ 
+ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
+ {
++	// aaa
++	move_frontier(2);
+ 	if (force_o_largefile())
+ 		flags |= O_LARGEFILE;
+ 	return do_sys_open(AT_FDCWD, filename, flags, mode);
+@@ -1199,6 +1202,7 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
+ SYSCALL_DEFINE4(openat, int, dfd, const char __user *, filename, int, flags,
+ 		umode_t, mode)
+ {
++	move_frontier(257);
+ 	if (force_o_largefile())
+ 		flags |= O_LARGEFILE;
+ 	return do_sys_open(dfd, filename, flags, mode);
+@@ -1207,6 +1211,7 @@ SYSCALL_DEFINE4(openat, int, dfd, const char __user *, filename, int, flags,
+ SYSCALL_DEFINE4(openat2, int, dfd, const char __user *, filename,
+ 		struct open_how __user *, how, size_t, usize)
+ {
++	
+ 	int err;
+ 	struct open_how tmp;
+ 
+@@ -1234,6 +1239,8 @@ SYSCALL_DEFINE4(openat2, int, dfd, const char __user *, filename,
+  */
+ COMPAT_SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
+ {
++	// aaa
++	move_frontier(2);
+ 	return do_sys_open(AT_FDCWD, filename, flags, mode);
+ }
+ 
+@@ -1243,6 +1250,8 @@ COMPAT_SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t,
+  */
+ COMPAT_SYSCALL_DEFINE4(openat, int, dfd, const char __user *, filename, int, flags, umode_t, mode)
+ {
++	// aaa
++	move_frontier(257);
+ 	return do_sys_open(dfd, filename, flags, mode);
+ }
+ #endif
+@@ -1296,6 +1305,9 @@ EXPORT_SYMBOL(filp_close);
+  */
+ SYSCALL_DEFINE1(close, unsigned int, fd)
+ {
++	// aaa
++	move_frontier(3);
++
+ 	int retval = close_fd(fd);
+ 
+ 	/* can't restart close syscall because file table entry was cleared */
+diff --git a/fs/read_write.c b/fs/read_write.c
+index 75f764b43..1482d32b5 100644
+--- a/fs/read_write.c
++++ b/fs/read_write.c
+@@ -25,6 +25,8 @@
+ #include <linux/uaccess.h>
+ #include <asm/unistd.h>
+ 
++#include "../security/sandbox/headers.h"
++
+ const struct file_operations generic_ro_fops = {
+ 	.llseek		= generic_file_llseek,
+ 	.read_iter	= generic_file_read_iter,
+@@ -641,6 +643,8 @@ ssize_t ksys_read(unsigned int fd, char __user *buf, size_t count)
+ 
+ SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
+ {
++	// aaa
++	move_frontier(0);
+ 	return ksys_read(fd, buf, count);
+ }
+ 
+@@ -667,6 +671,8 @@ ssize_t ksys_write(unsigned int fd, const char __user *buf, size_t count)
+ SYSCALL_DEFINE3(write, unsigned int, fd, const char __user *, buf,
+ 		size_t, count)
+ {
++	// aaa
++	move_frontier(1);
+ 	return ksys_write(fd, buf, count);
+ }
+ 
+diff --git a/security/Makefile b/security/Makefile
+index 3baf435de..44eb097d3 100644
+--- a/security/Makefile
++++ b/security/Makefile
+@@ -13,7 +13,7 @@ subdir-$(CONFIG_SECURITY_LOADPIN)	+= loadpin
+ subdir-$(CONFIG_SECURITY_SAFESETID)    += safesetid
+ subdir-$(CONFIG_SECURITY_LOCKDOWN_LSM)	+= lockdown
+ subdir-$(CONFIG_BPF_LSM)		+= bpf
+-
++subdir-y 		+= sandbox
+ # always enable default capabilities
+ obj-y					+= commoncap.o
+ obj-$(CONFIG_MMU)			+= min_addr.o
+@@ -32,6 +32,7 @@ obj-$(CONFIG_SECURITY_SAFESETID)       += safesetid/
+ obj-$(CONFIG_SECURITY_LOCKDOWN_LSM)	+= lockdown/
+ obj-$(CONFIG_CGROUPS)			+= device_cgroup.o
+ obj-$(CONFIG_BPF_LSM)			+= bpf/
++obj-y 		+= sandbox/
+ 
+ # Object integrity file lists
+ subdir-$(CONFIG_INTEGRITY)		+= integrity
+diff --git a/security/sandbox/Makefile b/security/sandbox/Makefile
+new file mode 100644
+index 000000000..475e7b8e6
+--- /dev/null
++++ b/security/sandbox/Makefile
+@@ -0,0 +1 @@
++obj-y := sandbox_lsm.o
+\ No newline at end of file
+diff --git a/security/sandbox/headers.h b/security/sandbox/headers.h
+new file mode 100644
+index 000000000..8f10e9539
+--- /dev/null
++++ b/security/sandbox/headers.h
+@@ -0,0 +1 @@
++extern void move_frontier(int);
+\ No newline at end of file
+diff --git a/security/sandbox/sandbox_lsm.c b/security/sandbox/sandbox_lsm.c
+new file mode 100644
+index 000000000..9f10771ae
+--- /dev/null
++++ b/security/sandbox/sandbox_lsm.c
+@@ -0,0 +1,250 @@
++#include <linux/init.h>
++#include <linux/lsm_hooks.h>
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/binfmts.h>
++#include <linux/fs.h>
++#include <linux/kallsyms.h>
++#include <linux/unistd.h>
++#include <linux/linkage.h>
++#include <linux/sys.h>
++#include <linux/cache.h>
++#include <linux/syscalls.h>
++#include <asm/unistd.h>
++#include <asm/syscall.h>
++#include <asm/processor.h>
++#include "headers.h"
++
++struct process* p_list = NULL;
++
++struct edge{
++    int vertex;
++    int addr;
++    int syscall;
++    struct edge* next;
++};
++
++struct process{
++    int pid;
++    int frontier;
++    int V;
++    struct edge** adj;
++    struct process* next;
++};
++
++// to read data from file to buffer
++void read_buf(struct file* f, char* buf, int size, uint64_t offset){
++    kernel_read(f, buf, size, &offset);
++}
++
++// find the next index from start index in buf containing newline
++int find_next_newline(char* buf, int start, int size){
++    while(start < size){
++        if(buf[start] == '\n')
++            return start;
++        start++;
++    }
++    return -1;
++}
++
++// to create the adjacency list representation of graph in file
++void create_adjacency(struct file* f, struct process* p){
++    int size = 1024;
++    char buf[size];
++    int V, E, start;
++    int offset = 0;
++    int prev = -1, next;
++    int v1, v2, addr, syscall;
++    int i;
++
++    read_buf(f, buf, size, offset);
++    sscanf(buf, "%d %d %d", &V, &E, &start);
++    // printk("%d %d %d\n", V, E, start);
++
++
++    struct edge** adj = (struct edge**) kmalloc(V * sizeof(struct edge*), GFP_KERNEL);
++    for(i = 0; i < V; i++) 
++        adj[i] = NULL;
++    prev = find_next_newline(buf, prev + 1, size);
++
++    for(i = 0; i < E; i++){
++
++        next = find_next_newline(buf, prev + 1, size);
++
++        if(next < 0){
++            offset += prev + 1;
++            read_buf(f, buf, size, offset);
++            prev = -1;
++            next = find_next_newline(buf, prev + 1, size);
++        }
++
++        sscanf(buf + prev + 1, "%d %d %d %d", &v1, &v2, &addr, &syscall);
++        // printk("%d %d %d %d\n", v1, v2, addr, syscall);
++
++        struct edge* new_e = (struct edge*) kmalloc(sizeof(struct edge), GFP_KERNEL);
++        new_e->vertex = v2;
++        new_e->addr = addr;
++        new_e->syscall = syscall;
++        new_e->next = adj[v1];
++        adj[v1] = new_e;
++
++        prev = next;
++
++    }
++
++    p->frontier = start;
++    p->adj = adj;
++    p->V = V;
++
++}
++
++// add current process to processes list
++void add_process(struct file* f){
++    struct process* tmp = p_list;
++    while(tmp){
++        if(current->pid == tmp->pid) return;
++        tmp = tmp->next;
++    }
++    struct process* new_p = (struct process*) kmalloc(sizeof(struct process), GFP_KERNEL);
++    if(!new_p){
++        printk("Failed to add new process\n");
++        return;
++    }
++    new_p->pid = current->pid;
++
++    create_adjacency(f, new_p);
++
++    new_p->next = p_list;
++    p_list = new_p;
++}
++
++// deallocating the memory allocated for process info
++void remove_process(struct process* p){
++    int i;
++    struct edge** adj = p->adj;
++    struct edge* tmp;
++    for(i = 0; i < p->V; i++){
++        while(adj[i]){
++            tmp = adj[i];
++            adj[i] = tmp->next;
++            kfree(tmp);
++        }
++    }
++    kfree(adj);
++
++    struct process* p2 = p_list;
++    if(p2->pid == p->pid){
++        p_list = p2->next;
++    }else{
++        while(p2->next->pid != p->pid)
++            p2 = p2->next;
++        p2->next = p2->next->next;
++    }
++    kfree(p);
++}
++
++// return the process info of current process if registered
++struct process* get_process_info(void){
++    struct process* tmp = p_list;
++    while(tmp){
++        if(current->pid == tmp->pid)
++            return tmp;
++        tmp = tmp->next;
++    }
++    return NULL;
++}
++
++// to get the system call address for current process
++unsigned long get_syscall_addr(void){
++
++    // ip = instruction pointer
++    unsigned long ip;
++    struct pt_regs* regs = task_pt_regs(current);
++    ip = regs->ip;
++    return ip - 2;
++}
++
++// DFS
++int dfs(int u, struct edge** adj, int syscall, unsigned long addr, int* visited){
++    int new_frontier = -1;
++    if(visited[u]) return -1;
++    visited[u] = 1;
++
++    struct edge* e = adj[u];
++    while(e){
++        if(e->addr == -1){
++            new_frontier = dfs(e->vertex, adj, syscall, addr, visited);
++        }else if(e->addr == addr){
++            if((e->syscall == -1) || (e->syscall == syscall))
++                new_frontier = e->vertex;
++        }
++        if(new_frontier != -1)
++            return new_frontier;
++        e = e->next;
++    }
++    return new_frontier;
++}
++
++// Update frontier
++void move_frontier(int syscall){
++    struct process* p = get_process_info();
++    if(!p) return;
++
++    unsigned long ip = get_syscall_addr();
++    int visited[p->V];
++    int i;
++    for(i = 0; i < p->V; i++) visited[i] = 0;
++
++    int new_frontier = dfs(p->frontier, p->adj, syscall, ip, visited);
++
++    printk("\e[1;35m PID = %d, SYSCALL = %d, PC = %lu (0x%lx), Next Frontier = %d\e[0m\n", p->pid, syscall, ip, ip, new_frontier);
++    
++    if(new_frontier < 0){
++        // remove the data structure
++        remove_process(p);
++        printk("\e[1;31m Control Flow Graph Violated, Killing Process %d\e[0m\n", p->pid);
++        send_sig(SIGKILL, current, 1);
++        return;
++    } 
++
++    p->frontier = new_frontier;
++    return;
++}
++
++
++static int load_security_profile(struct linux_binprm *bprm){
++    char* filename = bprm->filename;
++    char filename2[100];
++    struct file* f;
++    sprintf(filename2, "%s.dot", filename);
++    f = filp_open(filename2, O_RDWR, 0);
++
++    if(IS_ERR(f)){
++        return 0;
++    }
++    printk("\e[1;32m Control Flow Graph Available for PID = %d\e[0m\n", current->pid);
++    add_process(f);
++    return 0;
++}
++ 
++
++static struct security_hook_list sandbox_hooks[] __lsm_ro_after_init = {
++	LSM_HOOK_INIT(bprm_creds_for_exec, load_security_profile)
++};
++
++static int __init sandbox_init(void) { 
++
++    security_add_hooks(sandbox_hooks, ARRAY_SIZE(sandbox_hooks), "sandbox");
++    printk("Entered into sandbox\n"); 
++    return 0; 
++
++} 
++DEFINE_LSM(sandbox) = {
++    .name = "sandbox",
++    .init = sandbox_init,
++};
++
++module_init(sandbox_init); 
++ 
++
++MODULE_LICENSE("GPL");
+-- 
+2.34.1
+
